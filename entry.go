@@ -2,10 +2,14 @@ package main
 
 import (
 	"bufio"
+	"context"
+	"encoding/json"
+	"env-mngr/backend/db"
 	"fmt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/jackc/pgx/v5"
 	"strings"
 )
 
@@ -45,7 +49,26 @@ func main() {
 		}
 		log.Info(envContainer)
 		if len(envContainer) != 0 {
-			return c.JSON(fiber.Map{"error": false, "msg": nil, "info": fmt.Sprintf("added %d variables", len(envContainer))})
+			jsonEnvBucket, err := json.Marshal(envContainer)
+			if err != nil {
+				log.Error(err)
+				return c.JSON(fiber.Map{"error": true, "msg": err})
+			}
+			ctx := context.Background()
+			conn, err := pgx.Connect(ctx, "postgres://brad:12345678@localhost:5432/env-manager-v1")
+			if err != nil {
+				return err
+			}
+			defer conn.Close(ctx)
+			queries := db.New(conn)
+			insertedBucket, err := queries.CreateBucket(ctx, db.CreateBucketParams{Name: "Some bucket", Envvariables: jsonEnvBucket})
+			if err != nil {
+
+				return c.JSON(fiber.Map{"error": true, "msg": err})
+			}
+			log.Info(string(jsonEnvBucket))
+
+			return c.JSON(fiber.Map{"error": false, "msg": nil, "info": fmt.Sprintf("added %d variables for bucket %s ", len(envContainer), insertedBucket.Name)})
 		} else {
 			return c.JSON(fiber.Map{"error": true, "msg": "no environment variables added"})
 		}

@@ -1,0 +1,11 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "query.sql"
+    schema: "schema.sql"
+    database:
+      uri: "postgres://brad:12345678@localhost:5432/env-manager-v1"
+    gen:
+      go:
+        out: "db"
+        sql_package: "pgx/v5"

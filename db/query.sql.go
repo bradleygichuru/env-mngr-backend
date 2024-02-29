@@ -75,3 +75,21 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	)
 	return i, err
 }
+
+const getBucket = `-- name: GetBucket :one
+SELECT bucket_id, name, user_id, organization_id, envvariables FROM Bucket
+WHERE bucket_id = $1 LIMIT 1
+`
+
+func (q *Queries) GetBucket(ctx context.Context, bucketID int32) (Bucket, error) {
+	row := q.db.QueryRow(ctx, getBucket, bucketID)
+	var i Bucket
+	err := row.Scan(
+		&i.BucketID,
+		&i.Name,
+		&i.UserID,
+		&i.OrganizationID,
+		&i.Envvariables,
+	)
+	return i, err
+}

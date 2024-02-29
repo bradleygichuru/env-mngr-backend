@@ -18,3 +18,7 @@ INSERT INTO Organization (
   $1
  )
 RETURNING *;
+
+-- name: GetBucket :one
+SELECT * FROM Bucket
+WHERE bucket_id = $1 LIMIT 1;

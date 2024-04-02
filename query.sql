@@ -22,3 +22,7 @@ RETURNING *;
 -- name: GetBucket :one
 SELECT * FROM Bucket
 WHERE bucket_id = $1 LIMIT 1;
+
+-- name: GetUser :one
+SELECT * FROM Users
+WHERE email = $1 LIMIT 1;

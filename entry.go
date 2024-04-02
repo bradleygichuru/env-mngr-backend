@@ -3,6 +3,9 @@ package main
 import (
 	"bufio"
 	"context"
+	"time"
+
+	//"crypto/bcrypt"
 	"encoding/json"
 	"env-mngr/backend/db"
 	"fmt"
@@ -13,13 +16,18 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/log"
 	"github.com/gofiber/fiber/v2/middleware/cors"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"golang.org/x/crypto/bcrypt"
+	//"golang.org/x/crypto/bcrypt"
 )
 
 type entry struct {
 	Key   string
 	Entry string
 }
+
+var secretKey = []byte("secret-key")
 
 func main() {
 	app := fiber.New()
@@ -35,6 +43,61 @@ func main() {
 	app.Get("/", func(c *fiber.Ctx) error {
 		log.Info("/")
 		return c.SendString("Hello, World!")
+	})
+	app.Post("/api/signin", func(c *fiber.Ctx) error {
+		log.Info("/api/signin")
+		headersCopy := c.GetReqHeaders()
+		authHeaderVal := headersCopy["authorization"]
+
+		if authHeaderVal[0] != "" {
+			ok, err := authenticate(c.FormValue("email"), c.FormValue("password"), queries, ctx)
+			if err != nil {
+
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "msg": err.Error()})
+			}
+			if ok {
+				err := verifyToken(authHeaderVal[0])
+				if err != nil {
+
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "msg": err.Error()})
+				}
+
+				return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"error": false, "msg": "user authenticated"})
+			}
+		} else {
+			ok, err := authenticate(c.FormValue("email"), c.FormValue("password"), queries, ctx)
+			if err != nil {
+
+				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "msg": err.Error()})
+			}
+			if ok {
+				token, err := createToken(c.FormValue("email"))
+				if err != nil {
+
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "msg": err.Error()})
+				}
+				return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"error": false, "token": token, "msg": "user authenticated"})
+
+			}
+		}
+		return nil
+
+	})
+	app.Post("/api/create-user", func(c *fiber.Ctx) error {
+		log.Info("/api/create-user")
+		password := []byte(c.FormValue("password"))
+		hashedPassword, err := bcrypt.GenerateFromPassword(password, bcrypt.DefaultCost)
+		insertedUser, err := queries.CreateUser(ctx, db.CreateUserParams{Password: string(hashedPassword), Email: c.FormValue("email")})
+
+		if err != nil {
+			log.Error(err)
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "msg": err.Error()})
+		}
+		if insertedUser.Email == c.FormValue("email") {
+			log.Error(err)
+			return c.Status(fiber.StatusAccepted).JSON(fiber.Map{"error": false, "msg": "user created successfully"})
+		}
+		return nil
 	})
 	app.Post("/api/upload", func(c *fiber.Ctx) error {
 		log.Info("/api/upload")
@@ -115,4 +178,49 @@ func main() {
 		return c.JSON(fiber.Map{"error": false, "msg": nil, "info": fmt.Sprintf("found")})
 	})
 	app.Listen(":3002")
+
+}
+func authenticate(email string, password string, queries *db.Queries, ctx context.Context) (bool, error) {
+	user, err := queries.GetUser(ctx, email)
+	if err != nil {
+		return false, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+
+		log.Error(err)
+		return false, err
+	} else {
+		return true, nil
+	}
+
+}
+func createToken(username string) (string, error) {
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256,
+		jwt.MapClaims{
+			"username": username,
+			"exp":      time.Now().Add(time.Hour * 24).Unix(),
+		})
+
+	tokenString, err := token.SignedString(secretKey)
+	if err != nil {
+		return "", err
+	}
+
+	return tokenString, nil
+}
+func verifyToken(tokenString string) error {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return secretKey, nil
+	})
+
+	if err != nil {
+		return err
+	}
+
+	if !token.Valid {
+		return fmt.Errorf("invalid token")
+	}
+
+	return nil
 }

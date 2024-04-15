@@ -47,6 +47,7 @@ func main() {
 	app.Post("/api/signin", func(c *fiber.Ctx) error {
 		log.Info("/api/signin")
 		headersCopy := c.GetReqHeaders()
+		log.Info(headersCopy)
 		authHeaderVal := headersCopy["authorization"]
 
 		if authHeaderVal[0] != "" {
